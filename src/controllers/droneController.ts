@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import Drone from '../models/drone';
+import Drone from '../models/droneModel';
 import { validateObjectId } from '../utils/validateObjectId';
 import { droneSchema } from '../validators/droneValidator';
 

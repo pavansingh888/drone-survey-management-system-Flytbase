@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import SurveyReport from '../models/SurveyReport';
+import SurveyReport from '../models/surveyReportModel';
 import { createSurveyReportSchema } from '../validators/surveyReportValidator';
 import { validateObjectId } from '../utils/validateObjectId';
 

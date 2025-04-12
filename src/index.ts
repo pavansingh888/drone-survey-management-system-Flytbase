@@ -10,6 +10,7 @@ import missionRoutes from "./routes/missionRoutes";
 import authRoutes from "./routes/authRoutes";
 import droneRoutes from "./routes/droneRoutes";
 import surveyReportRoutes from "./routes/surveyReportRoutes";
+import missionStatusRoutes from "./routes/missionStatusRoutes";
 
 const app = express();
 const server = http.createServer(app);
@@ -25,6 +26,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/missions", missionRoutes);
 app.use("/api/drones", droneRoutes);
 app.use("/api/reports", surveyReportRoutes);
+app.use("/api/mission-status", missionStatusRoutes);
 
 // TODO: Setup sockets
 // import setupDroneSocket from './sockets/droneSocket';
