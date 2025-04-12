@@ -49,16 +49,27 @@ export const createDrone = async (req: Request, res: Response) => {
     }
   };
 
-// Get all drones
-export const getDrones = async (_req: Request, res: Response) => {
-  try {
-    const drones = await Drone.find();
-    res.json(drones);
-  } catch (error) {
-    console.error('Get Drones Error:', error);
-    res.status(500).json({ message: 'Server error while fetching drones' });
-  }
-};
+  // Get drones in inventory
+  export const getDrones = async (req: Request, res: Response) => {
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const skip = (page - 1) * limit;
+  
+      const drones = await Drone.find().skip(skip).limit(limit);
+      const total = await Drone.countDocuments();
+  
+      res.status(200).json({
+        data: drones,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        totalItems: total,
+      });
+    } catch (error) {
+      console.error("Get Drones Error:", error);
+      res.status(500).json({ message: "Server error while fetching drones" });
+    }
+  };
 
 // Get drone by ID
 export const getDroneById = async (req: Request, res: Response) => {

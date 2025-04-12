@@ -3,13 +3,15 @@ import {
   createSurveyReport,
   getAllReports,
   getReportById,
+  getSurveyStatistics,
 } from '../controllers/surveyReportController';
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = express.Router();
-
-router.post('/', authMiddleware, createSurveyReport);
-router.get('/', authMiddleware, getAllReports);
+router.get('/statistics', getSurveyStatistics);
 router.get('/:id', authMiddleware, getReportById);
+router.get('/', authMiddleware, getAllReports);
+router.post('/', authMiddleware, createSurveyReport);
+
 
 export default router;

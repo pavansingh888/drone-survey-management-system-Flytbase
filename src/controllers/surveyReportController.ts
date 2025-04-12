@@ -76,3 +76,22 @@ export const getReportById = async (req: Request, res: Response) => {
       return;
     }
   };
+
+  export const getSurveyStatistics = async (req: Request, res: Response) => {
+    try {
+      const totalSurveys = await SurveyReport.countDocuments();
+      const completedSurveys = await SurveyReport.countDocuments({ status: "completed" });
+      const failedSurveys = await SurveyReport.countDocuments({ status: "failed" });
+  
+      res.status(200).json({
+        totalSurveys,
+        completedSurveys,
+        failedSurveys,
+      });
+      return;
+    } catch (err) {
+      console.error("Error fetching survey statistics:", err);
+      res.status(500).json({ error: "Failed to fetch survey statistics" });
+      return;
+    }
+  };

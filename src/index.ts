@@ -11,12 +11,10 @@ import authRoutes from "./routes/authRoutes";
 import droneRoutes from "./routes/droneRoutes";
 import surveyReportRoutes from "./routes/surveyReportRoutes";
 import missionStatusRoutes from "./routes/missionStatusRoutes";
+import { authenticateSocket } from "./sockets/authenticateSocket";
+import setupMissionSocket from "./sockets/missionSocket";
 
 const app = express();
-const server = http.createServer(app);
-const io = new SocketIOServer(server, {
-  cors: { origin: "*" },
-});
 
 app.use(cors());
 app.use(express.json());
@@ -29,8 +27,17 @@ app.use("/api/reports", surveyReportRoutes);
 app.use("/api/mission-status", missionStatusRoutes);
 
 // TODO: Setup sockets
-// import setupDroneSocket from './sockets/droneSocket';
-// setupDroneSocket(io);
+const server = http.createServer(app);
+
+// create Socket.IO server
+const io = new SocketIOServer(server, {
+  cors: { origin: "*" },
+});
+
+// apply socket authentication middleware
+io.use(authenticateSocket);
+// setup mission socket listeners
+setupMissionSocket(io);
 
 const PORT = config.port;
 connectDB().then(()=>{
