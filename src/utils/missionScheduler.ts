@@ -85,7 +85,9 @@ export async function scheduleOneTimeMissions(io: Server) {
               // Update drone's current mission
               const updatedDrone = await droneModel.findByIdAndUpdate(
                 availableDrone._id,
-                { currentMissionId: missionStatus.mission },
+                { currentMissionId: missionStatus.mission,
+                  status:"in-mission" // Update drone status to in-mission
+                 },
                 { new: true } // Return the updated document
               );
               
@@ -244,7 +246,9 @@ export function RecurringMissionPolling(io: Server) {
                 try {
                   const updatedDrone = await droneModel.findByIdAndUpdate(
                     availableDrone._id,
-                    { currentMissionId: missionStatus.mission._id },
+                    { currentMissionId: missionStatus.mission._id,
+                      status: "in-mission" // Update drone status to in-mission
+                    },
                     { new: true }
                   );
                   
