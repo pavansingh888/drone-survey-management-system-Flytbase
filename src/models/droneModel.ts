@@ -1,11 +1,13 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IDrone extends Document {
+  _id: mongoose.Types.ObjectId;
   name: string;
   location: string;
   status: 'available' | 'in-mission' | 'maintenance';
   batteryLevel: number; // % from 0 to 100
   isActive: boolean;
+  currentMissionId: mongoose.Types.ObjectId
 }
 
 const DroneSchema: Schema = new Schema({
@@ -23,8 +25,15 @@ const DroneSchema: Schema = new Schema({
     default: 100,
   },
   isActive: { type: Boolean, default: true },
+  currentMissionId: { type: mongoose.Schema.Types.ObjectId, default: null, ref: 'Mission' }
 }, {
   timestamps: true,
 });
+
+DroneSchema.index({ status: 1 });
+DroneSchema.index({ batteryLevel: 1 });
+DroneSchema.index({ currentMissionId: 1 });
+DroneSchema.index({ isActive: 1 });
+DroneSchema.index({ status: 1, batteryLevel: 1, isActive: 1, currentMissionId: 1 });
 
 export default mongoose.model<IDrone>('Drone', DroneSchema);

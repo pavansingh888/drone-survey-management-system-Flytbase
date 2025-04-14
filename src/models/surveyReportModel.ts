@@ -23,4 +23,9 @@ const surveyReportSchema = new Schema<ISurveyReport>(
   { timestamps: true }
 );
 
+surveyReportSchema.index({ status: 1, createdAt: -1 });
+surveyReportSchema.index({ createdAt: -1 });
+surveyReportSchema.index({ status: 1 });
+
+
 export default mongoose.model<ISurveyReport>('SurveyReport', surveyReportSchema);

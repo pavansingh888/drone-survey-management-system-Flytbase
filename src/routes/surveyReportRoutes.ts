@@ -8,7 +8,7 @@ import {
 import { authMiddleware } from '../middleware/authMiddleware';
 
 const router = express.Router();
-router.get('/statistics', getSurveyStatistics);
+router.get('/statistics', authMiddleware, getSurveyStatistics);
 router.get('/:id', authMiddleware, getReportById);
 router.get('/', authMiddleware, getAllReports);
 router.post('/', authMiddleware, createSurveyReport);

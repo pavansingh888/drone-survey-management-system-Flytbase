@@ -1,139 +1,249 @@
 import { Server } from "socket.io";
 import { authenticateSocket } from "./authenticateSocket";
-import { getMissionRoomId } from "../utils/roomUtils";
+import { getDroneRoomId } from "../utils/roomUtils";
 import MissionStatus from "../models/missionStatusModel";
-import { progressUpdateSchema, statusUpdateSchema } from "../validators/missionSocketSchemas";
-import {IMissionStatus} from "../models/missionStatusModel";
+import { progressUpdateSchema } from "../validators/missionSocketSchemas";
+import { IMissionStatus } from "../models/missionStatusModel";
+import droneModel from "../models/droneModel";
+import surveyReportModel from "../models/surveyReportModel";
 
 export default function setupMissionSocket(io: Server) {
-  const missionIO = io.of("/mission");
+  const droneIO = io.of("/drone");
 
-  missionIO.use(authenticateSocket);
+  droneIO.use(authenticateSocket);
 
-  missionIO.on("connection", (socket) => {
-    console.log("✅ [SOCKET] Client connected to /mission");
+  droneIO.on("connection", (socket) => {
+    console.log("✅ [SOCKET] Client connected to /drone");
 
-    //Client joins a mission room to see real time updates of that mission and to emit action events.
+    //Client joins a drone room to see real time updates of that mission and to emit action events.
     //drone joins a mission room to sent progress and status updates
-    socket.on("join_mission", (missionId: string) => {
-      const roomId = getMissionRoomId(missionId);
+    socket.on("join_droneRoom", (droneId: string) => {
+      const roomId = getDroneRoomId(droneId);
       socket.join(roomId);
-      console.log(`🔗 Client joined ${roomId}`);
+      console.log(`🔗 Drone/Client joined ${roomId}`);
     });
     //Client leaves watching the realtime updates of a mission by leaving mission room
-    //drone leaves room and stop send updates to room 
-    socket.on("leave_mission", (missionId: string) => {
-      const roomId = getMissionRoomId(missionId);
+    //drone leaves room and stop send updates to room
+    socket.on("leave_droneRoom", (droneId: string) => {
+      const roomId = getDroneRoomId(droneId);
       socket.leave(roomId);
-      console.log(`❌ Client left ${roomId}`);
+      console.log(`❌ Drone/Client left ${roomId}`);
     });
 
-    // listens to Flight path updates from drone for getting its realtime coordinate/position and sending it to mission room for client to see realtime updates
-    socket.on("flight_update", ({ missionId, coordinate }) => {
-      const roomId = getMissionRoomId(missionId);
-      missionIO.to(roomId).emit("flight_update", coordinate);
+    // TODO: Use socket.io to push drone availability, battery, status from the drone SDK/device to droneModel
+    socket.on(
+      "drone_update",
+      async ({
+        droneId,
+        location,
+        status,
+        batteryLevel,
+        isActive,
+        currentMissionId,
+      }) => {
+        try {
+          const existingDrone = await droneModel.findById(droneId);
+          if (!existingDrone) {
+            console.warn(`⚠️ Drone with ID ${droneId} not found`);
+            return;
+          }
+
+          const previousMissionId = existingDrone.currentMissionId?.toString();
+
+          const updatedDrone = await droneModel.findByIdAndUpdate(
+            droneId,
+            {
+              ...(location && { location }),
+              ...(status && { status }),
+              ...(typeof batteryLevel === "number" && { batteryLevel }),
+              ...(typeof isActive === "boolean" && { isActive }),
+              ...(typeof currentMissionId !== "undefined" && {
+                currentMissionId,
+              }),
+              updatedAt: new Date(),
+            },
+            { new: true }
+          );
+
+          if (updatedDrone) {
+            console.log(`🛩️ Drone ${droneId} updated`);
+
+            // Emit drone_update to the room
+            const roomId = getDroneRoomId(droneId);
+
+            droneIO.to(roomId).emit("drone_update", {
+              droneId: updatedDrone._id,
+              location: updatedDrone.location,
+              status: updatedDrone.status,
+              batteryLevel: updatedDrone.batteryLevel,
+              isActive: updatedDrone.isActive,
+              currentMissionId: updatedDrone.currentMissionId,
+            });
+
+            console.log(`📡 Emitted drone_update to Drone room ${roomId}`);
+
+            // Emit drone_unlinked event if the drone is unlinked from a mission
+            // This is done by checking if currentMissionId is null and previousMissionId is not null
+            if (
+              typeof currentMissionId !== "undefined" &&
+              currentMissionId === null &&
+              previousMissionId
+            ) {
+              const roomId = getDroneRoomId(droneId);
+              droneIO.to(roomId).emit("mission_unlinked", {
+                droneId: updatedDrone._id,
+                previousMissionId,
+                currentMissionId: null,
+              });
+              console.log(
+                `🔌 Drone ${droneId} unlinked from mission ${previousMissionId}`
+              );
+            }
+          } else {
+            console.warn(`⚠️ Drone with ID ${droneId} not found`);
+          }
+        } catch (err) {
+          console.error("Error updating drone data:", err);
+        }
+      }
+    );
+
+    // drone will send coordinates to the server and server will emit it to all the members joined in the room. So once client recieves back the event it sent, it can be sure that mission action is completed.
+    socket.on("drone_coordinate", ({ droneId, coordinate }) => {
+      const roomId = getDroneRoomId(droneId);
+      droneIO.to(roomId).emit("drone_coordinate", coordinate);
     });
 
-    // drone will send Mission progress update getting realtime survey progress and sending it to mission room for client to see realtime progress updates
+    // drone will send Mission progress update for getting realtime survey progress and sending it to mission room for client to see realtime progress updates
     //as well as updating progress details to mission status model
     socket.on("progress_update", async (payload) => {
-        const result = progressUpdateSchema.safeParse(payload);
-        if (!result.success) return console.error("Invalid progress_update payload");
-      
-        const { missionId, progress, eta } = result.data;
-        const roomId = getMissionRoomId(missionId);
-      
-        try {
-          await MissionStatus.findOneAndUpdate(
-            { mission: missionId },
-            {
-              progress,
-              estimatedTimeRemaining: eta,
-              lastUpdated: new Date(),
-            },
-            { upsert: true, new: true }
-          );
-      
-          missionIO.to(roomId).emit("progress_update", { progress, eta });
-        } catch (err) {
-          console.error("Error saving progress:", err);
-        }
-      });
-      
+      const result = progressUpdateSchema.safeParse(payload);
+      if (!result.success)
+        return console.error("Invalid progress_update payload");
 
-    // drone will send status update for realtime monitoring of mission status
-    //as well as updating status details to mission status model
-    socket.on("status_update", async (payload) => {
-    const result = statusUpdateSchema.safeParse(payload);
-    if (!result.success) return console.error("Invalid status_update payload");
-  
-    const { missionId, status } = result.data;
-    const roomId = getMissionRoomId(missionId);
-  
-    try {
-      await MissionStatus.findOneAndUpdate(
-        { mission: missionId },
-        {
-          status,
-          lastUpdated: new Date(),
-        },
-        { upsert: true, new: true }
-      );
-  
-      missionIO.to(roomId).emit("status_update", status);
-    } catch (err) {
-      console.error("Error saving status:", err);
-    }
-  });
+      const { missionId, progress, eta, status, droneId, duration, distance } =
+        result.data;
+      const roomId = getDroneRoomId(droneId);
 
-    // Client sends Control actions: pause, resume, abort, which is emitted to all the members joined in the room. So once client recieves back the event it sent, it can be sure that mission action is completed.
-    socket.on("mission_action", async ({ missionId, action }: { missionId: string; action: "pause" | "resume" | "abort" }) => {
-      const roomId = getMissionRoomId(missionId);
-    
       try {
-        let newStatus: IMissionStatus["status"] | null = null;
-    
-        switch (action) {
-          case "pause":
-            newStatus = "paused";
-            break;
-          case "resume":
-            newStatus = "in_progress";
-            break;
-          case "abort":
-            newStatus = "aborted";
-            break;
-          default:
-            console.warn(`Unknown action "${action}" received`);
-            return;
+        // Handle survey report creation if mission is completed or aborted
+        // On mission status=completed or aborted update from drone → generate a survey report with status=completed if progress is more than 85%  with and save in survey report model and update mission status model with status=not_started and progress=0 and estimatedTimeRemaining=null and droneId=null
+        if (status === "completed" || status === "aborted") {
+          if (droneId && duration && distance && progress) {
+            const reportStatus = progress >= 85 ? "completed" : "failed";
+
+            const report = await surveyReportModel.create({
+              missionId,
+              droneId,
+              duration,
+              distance,
+              coverage: progress,
+              status: reportStatus,
+              generatedAt: new Date(),
+            });
+            console.log(`Survey report generated for mission`, report);
+            await MissionStatus.findOneAndUpdate(
+              { mission: missionId },
+              {
+                droneId:null,
+                progress:0,
+                estimatedTimeRemaining:null,
+                status:"not_started",
+                lastUpdated: new Date(),
+              },
+              { upsert: true, new: true }
+            );
+          } else {
+            console.warn(`Missing survey report data in payload for mission`);
+          }
         }
-    
-        // Update DB
-        const updated = await MissionStatus.findOneAndUpdate(
+        await MissionStatus.findOneAndUpdate(
           { mission: missionId },
           {
-            status: newStatus,
+            progress,
+            estimatedTimeRemaining: eta,
+            status,
             lastUpdated: new Date(),
           },
-          { new: true }
+          { upsert: true, new: true }
         );
-    
-        if (!updated) {
-          console.warn(`⚠️ No MissionStatus found for mission ${missionId}`);
-        } else {
-          console.log(`✅ Mission ${missionId} status updated to ${newStatus}`);
-        }
-    
-        // Emit to all clients in the room
-        missionIO.to(roomId).emit("mission_action", action);
-    
+        droneIO
+          .to(roomId)
+          .emit("mission_progress_update", {
+            missionId,
+            progress,
+            duration,
+            distance,
+            eta,
+            status,
+          });
       } catch (err) {
-        console.error("Error updating mission status:", err);
+        console.error("Error saving progress:", err);
       }
     });
 
+    // Client sends Control actions: pause, resume, abort, which is emitted to all the members joined in the room. So once client recieves back the event it sent, it can be sure that mission action is completed.
+    socket.on(
+      "mission_action",
+      async ({
+        droneId,
+        missionId,
+        action,
+      }: {
+        droneId: string;
+        missionId: string;
+        action: "pause" | "resume" | "abort";
+      }) => {
+        const roomId = getDroneRoomId(droneId);
+
+        try {
+          let newStatus: IMissionStatus["status"] | null = null;
+
+          switch (action) {
+            case "pause":
+              newStatus = "paused";
+              break;
+            case "resume":
+              newStatus = "in_progress";
+              break;
+            case "abort":
+              newStatus = "aborted";
+              break;
+            default:
+              console.warn(`Unknown action "${action}" received`);
+              return;
+          }
+
+          // Update DB
+          const updated = await MissionStatus.findOneAndUpdate(
+            { droneId, mission: missionId },
+            {
+              status: newStatus,
+              lastUpdated: new Date(),
+            },
+            { new: true }
+          );
+
+          if (!updated) {
+            console.warn(
+              `⚠️ No MissionStatus found for mission associated with drone ${droneId}`
+            );
+          } else {
+            console.log(
+              `✅ Mission assigned to drone ${droneId}, status updated to ${newStatus}`
+            );
+          }
+
+          // Emit to all clients in the room
+          droneIO.to(roomId).emit("mission_action", action);
+        } catch (err) {
+          console.error("Error updating mission status:", err);
+        }
+      }
+    );
+
     socket.on("disconnect", () => {
-      console.log("🚪 [SOCKET] Client disconnected from /mission");
+      console.log("🚪 [SOCKET] Drone/Client disconnected from /drone");
     });
   });
 }

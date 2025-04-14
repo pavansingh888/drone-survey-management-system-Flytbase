@@ -1,18 +1,19 @@
 import { Request, Response } from "express";
 import MissionStatus from "../models/missionStatusModel";
-import { updateMissionStatusSchema } from "../validators/missionStatusValidator";
+import { missionStatusSchema, updateMissionStatusSchema } from "../validators/missionStatusValidator";
+import Mission from "../models/missionModel";
 
 export const getMissionStatus = async (req: Request, res: Response) => {
   try {
     const missionId = req.params.id;
-    const status = await MissionStatus.findOne({ mission: missionId });
+    const missionStatus = await MissionStatus.findOne({ mission: missionId });
 
-    if (!status) {
+    if (!missionStatus) {
       res.status(404).json({ message: "Mission status not found" });
       return;
     }
 
-    res.json(status);
+    res.json(missionStatus);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -39,5 +40,37 @@ export const updateMissionStatus = async (req: Request, res: Response) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+//For launching a mission - basically launched mission data
+export const createMissionStatus = async (req: Request, res: Response) => {
+  try {
+    const parsed = missionStatusSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: 'Validation error', errors: parsed.error.errors });
+      return;
+    }
+
+    const { missionId } = parsed.data;
+
+    // 1. Check if mission exists
+    const mission = await Mission.findById(missionId);
+    if (!mission) {
+      res.status(404).json({ message: "Mission not found" });
+      return;
+    }
+
+    // 2. Create MissionStatus(i.e launched mission) entry
+    const savedMission = await MissionStatus.create({
+      mission:missionId,
+    });
+
+    res.status(201).json({ message: "Mission Launch Sceduled", savedMission });
+    return;
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+    return;
   }
 };

@@ -18,7 +18,7 @@ export interface IMission extends Document {
   schedule: {
     type: "one-time" | "recurring";
     cron?: string; // For recurring schedules
-    date?: Date;   // For one-time
+    date?: Date; // For one-time
   };
   createdBy: mongoose.Types.ObjectId;
 }
@@ -56,6 +56,9 @@ const missionSchema = new mongoose.Schema<IMission>(
   },
   { timestamps: true }
 );
+
+missionSchema.index({ createdBy: 1, createdAt: -1 });
+missionSchema.index({ _id: 1, createdBy: 1 });
 
 const Mission = mongoose.model<IMission>("Mission", missionSchema);
 export default Mission;

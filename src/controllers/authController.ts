@@ -31,7 +31,7 @@ export const signup = async (req: Request, res: Response) => {
     const user = await User.create({ name, email, password: hashedPassword });
     const token = generateToken(String(user._id));
 
-    res.status(201).json({ token, user: { id: user._id, name, email } });
+    res.status(201).json({ token, user: user });
   } catch (error) {
     console.error("Signup Error:", error);
     res.status(500).json({ msg: "Server error during signup" });

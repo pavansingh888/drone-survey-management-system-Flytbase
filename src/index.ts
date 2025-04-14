@@ -13,20 +13,21 @@ import surveyReportRoutes from "./routes/surveyReportRoutes";
 import missionStatusRoutes from "./routes/missionStatusRoutes";
 import { authenticateSocket } from "./sockets/authenticateSocket";
 import setupMissionSocket from "./sockets/missionSocket";
+import { RecurringMissionPolling, scheduleOneTimeMissions } from "./utils/missionScheduler";
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
-// TODO: Load routes
+// Load routes
 app.use("/api/auth", authRoutes);
 app.use("/api/missions", missionRoutes);
 app.use("/api/drones", droneRoutes);
 app.use("/api/reports", surveyReportRoutes);
 app.use("/api/mission-status", missionStatusRoutes);
 
-// TODO: Setup sockets
+// Setup sockets
 const server = http.createServer(app);
 
 // create Socket.IO server
@@ -38,6 +39,9 @@ const io = new SocketIOServer(server, {
 io.use(authenticateSocket);
 // setup mission socket listeners
 setupMissionSocket(io);
+scheduleOneTimeMissions(io);
+RecurringMissionPolling(io);
+
 
 const PORT = config.port;
 connectDB().then(()=>{
